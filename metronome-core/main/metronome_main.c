@@ -9,11 +9,6 @@
 
 #include "wifi_ap.h"
 
-/* Metronome WiFi configuration 
-*/
-#define METRONOME_WIFI_SSID		"METRONOME-CORE"
-#define METRONOME_WIFI_PASS		"StayOnTheBeat"
-#define METRONOME_MAX_STA_CONN	4
 
 static const char* TAG = "metronome_main";
 
