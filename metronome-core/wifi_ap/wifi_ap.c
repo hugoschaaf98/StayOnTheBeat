@@ -1,7 +1,7 @@
+#include "wifi_ap.h"
+
 #include <string.h>
 #include "esp_log.h"
-
-#include "wifi_ap.h"
 
 static const char* TAG = "wifi_ap";
 
@@ -33,10 +33,10 @@ void wifi_init_softap(void)
     /* configure wifi */
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = METRONOME_WIFI_SSID,
-            .ssid_len = strlen(METRONOME_WIFI_SSID),
-            .password = METRONOME_WIFI_PASS,
-            .max_connection = METRONOME_MAX_STA_CONN,
+            .ssid = CONFIG_WIFI_SSID,
+            .ssid_len = strlen(CONFIG_WIFI_SSID),
+            .password = CONFIG_WIFI_PASS,
+            .max_connection = CONFIG_MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
@@ -51,5 +51,5 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s",
-             METRONOME_WIFI_SSID, METRONOME_WIFI_PASS);
+             CONFIG_WIFI_SSID, CONFIG_WIFI_PASS);
 }

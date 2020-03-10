@@ -8,9 +8,15 @@
 
 /* Metronome WiFi configuration 
 */
-#define METRONOME_WIFI_SSID		"METRONOME-CORE"
-#define METRONOME_WIFI_PASS		"StayOnTheBeat"
+#ifndef METRONOME_WIFI_SSID
+#define METRONOME_WIFI_SSID		"Metronome-default"
+#endif
+#ifndef METRONOME_WIFI_PASS
+#define METRONOME_WIFI_PASS		"default"
+#endif
+#ifndef METRONOME_MAX_STA_CONN
 #define METRONOME_MAX_STA_CONN	4
+#endif
 
 void wifi_init_softap(void);
 
