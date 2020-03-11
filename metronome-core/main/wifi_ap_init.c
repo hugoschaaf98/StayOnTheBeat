@@ -1,9 +1,34 @@
-#include "wifi_ap.h"
+#include "init.h"
+
+#include "esp_netif.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "lwip/err.h"
+#include "lwip/sys.h"
+
+#include "mdns.h" /* local dns */
 
 #include <string.h>
 #include "esp_log.h"
 
-static const char* TAG = "wifi_ap";
+static const char* TAG = "wifi_ap_init";
+
+#define MDNS_INSTANCE "Metronome-WebServer"
+
+static void mdns_configure(void)
+{
+    mdns_init();
+    mdns_hostname_set(CONFIG_M_MDNS_HOST_NAME);
+    mdns_instance_name_set(MDNS_INSTANCE);
+
+    mdns_txt_item_t serviceTxtData[] = {
+        {"board", "esp32"},
+        {"path", "/"}
+    };
+
+    ESP_ERROR_CHECK(mdns_service_add("Metronome-WebServer", "_http", "_tcp", 80, serviceTxtData,
+                                     sizeof(serviceTxtData) / sizeof(serviceTxtData[0])));
+}
 
 static void wifi_event_handler(void* arg, esp_event_base_t event_base,
                                     int32_t event_id, void* event_data)
@@ -19,10 +44,16 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base,
     }
 }
 
-void wifi_init_softap(void)
+esp_err_t wifi_ap_init(void)
 {
+
+    esp_err_t ret = ESP_OK;
+
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    mdns_configure();
+
     esp_netif_create_default_wifi_ap();
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
@@ -33,16 +64,16 @@ void wifi_init_softap(void)
     /* configure wifi */
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = CONFIG_WIFI_SSID,
-            .ssid_len = strlen(CONFIG_WIFI_SSID),
-            .password = CONFIG_WIFI_PASS,
-            .max_connection = CONFIG_MAX_STA_CONN,
+            .ssid = CONFIG_M_WIFI_SSID,
+            .ssid_len = strlen(CONFIG_M_WIFI_SSID),
+            .password = CONFIG_M_WIFI_PASSWORD,
+            .max_connection = CONFIG_M_WIFI_MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
 
     /* if password empty set open acces */
-    if (strlen(METRONOME_WIFI_PASS) == 0) {
+    if (strlen(CONFIG_M_WIFI_PASSWORD) == 0) {
         wifi_config.ap.authmode = WIFI_AUTH_OPEN;
     }
 
@@ -50,6 +81,8 @@ void wifi_init_softap(void)
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s",
-             CONFIG_WIFI_SSID, CONFIG_WIFI_PASS);
+    ESP_LOGI(TAG, "wifi_ap_init finished. SSID:%s password:%s",
+             CONFIG_M_WIFI_SSID, CONFIG_M_WIFI_PASSWORD);
+
+    return ret;
 }

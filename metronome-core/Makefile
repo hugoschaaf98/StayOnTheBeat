@@ -2,12 +2,12 @@ PROJECT_NAME := metronome
 
 include $(IDF_PATH)/make/project.mk
 
-ifdef CONFIG_WEB_DEPLOY_SF
-WEB_SRC_DIR = $(shell pwd)/front
-ifneq ($(wildcard $(WEB_SRC_DIR)/dist/.*),)
-SPIFFS_IMAGE_FLASH_IN_PROJECT := 1
-$(eval $(call spiffs_create_partition_image,www,$(WEB_SRC_DIR)/dist))
-else
-$(error $(WEB_SRC_DIR)/dist doesn't exist. Please run 'npm run build' in $(WEB_SRC_DIR))
-endif
+ifdef CONFIG_M_WEB_DEPLOY_SF
+	WEB_SRC_DIR = $(shell pwd)/front
+	ifneq ($(wildcard $(WEB_SRC_DIR)/dist/.*),)
+		SPIFFS_IMAGE_FLASH_IN_PROJECT := 1
+		$(eval $(call spiffs_create_partition_image,www,$(WEB_SRC_DIR)/dist))
+	else
+		$(error $(WEB_SRC_DIR)/dist doesn't exist. Please run 'npm run build' in $(WEB_SRC_DIR))
+	endif
 endif
