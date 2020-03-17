@@ -7,6 +7,8 @@
 #include "lwip/sys.h"
 
 #include "mdns.h" /* local dns */
+#include "lwip/apps/netbiosns.h" /* for domain name but with windows devices */
+
 
 #include <string.h>
 #include "esp_log.h"
@@ -20,6 +22,9 @@ static void mdns_configure(void)
     mdns_init();
     mdns_hostname_set(CONFIG_M_MDNS_HOST_NAME);
     mdns_instance_name_set(MDNS_INSTANCE);
+    netbiosns_init();
+    netbiosns_set_name(CCONFIG_M_MDNS_HOST_NAME);
+
 
     mdns_txt_item_t serviceTxtData[] = {
         {"board", "esp32"},
