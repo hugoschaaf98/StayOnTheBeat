@@ -3,7 +3,7 @@ PROJECT_NAME := metronome
 include $(IDF_PATH)/make/project.mk
 
 ifdef CONFIG_M_WEB_DEPLOY_SF
-	WEB_SRC_DIR = $(shell pwd)/front
+	WEB_SRC_DIR = $(shell pwd)../front
 	ifneq ($(wildcard $(WEB_SRC_DIR)/dist/.*),)
 		SPIFFS_IMAGE_FLASH_IN_PROJECT := 1
 		$(eval $(call spiffs_create_partition_image,www,$(WEB_SRC_DIR)/dist))

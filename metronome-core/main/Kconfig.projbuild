@@ -1,24 +1,33 @@
 menu "Metronome Configuration"
 
+    # AUDIO CONFIGURATION
+    menu "Audio configuration"
+        config M_SAMPLE_RATE
+            int "Audio output sample rate"
+            default 44100
+            help
+                choose the same sampling rate as the audio files you want the metronome to read.
+    endmenu
 
+    # WIFI CONFIGURATION
     menu "Wifi configuration"
         config M_WIFI_SSID
             string "WiFi SSID"
             default "StayOnTheBeat"
             help
-                SSID (network name) for the example to connect to.
+                SSID (network name) for the metronome to connect to.
 
         config M_WIFI_PASSWORD
             string "WiFi Password"
-            default "mypassword"
+            default "password"
             help
-                WiFi password (WPA or WPA2) for the example to use.
+                WiFi password (WPA or WPA2).
 
         config M_WIFI_MAX_STA_CONN
             int "Maximal STA connections"
             default 4
             help
-                Max number of the STA connects to AP.
+                Max number of wifi connections.
 
         config M_MDNS_HOST_NAME
             string "Metronome mDNS Host Name"
@@ -27,9 +36,9 @@ menu "Metronome Configuration"
                 Specify the domain name used in the mDNS service.
                 Note that webpage also take it as a part of URL where it will send GET/POST requests to
     endmenu
-    
 
-    choice 
+    # WEB DEPLOY CONFIGURATION
+    choice Deploy mode
         prompt "Web interface deploy mode"
         default M_WEB_DEPLOY_SEMIHOST
         help
@@ -55,19 +64,17 @@ menu "Metronome Configuration"
                 Choose this production mode if the size of website is small (less than 2MB).
     endchoice
 
-    if M_WEB_DEPLOY_SEMIHOST
-        config M_HOST_PATH_TO_MOUNT
-            string "Host path to mount (e.g. absolute path to web dist directory)"
-            default "PATH-TO-WEB-DIST_DIR"
-            help
-                When using semihost in ESP32, you should specify the host path which will be mounted to VFS.
-                Note that only absolute path is acceptable.
-    endif
-
+if M_WEB_DEPLOY_SEMIHOST
+    config M_HOST_PATH_TO_MOUNT
+        string "Host path to mount (e.g. absolute path to web dist directory)"
+        default "PATH-TO-WEB-DIST_DIR"
+        help
+            When using semihost in ESP32, you should specify the host path which will be mounted to VFS.
+            Note that only absolute path is acceptable.
+endif
     config M_WEB_MOUNT_POINT
         string "Website mount point in VFS"
         default "/www"
         help
             Specify the mount point in VFS.
-            
 endmenu
