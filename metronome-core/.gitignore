@@ -1,3 +1,4 @@
-build/*
+/build/*
 sdkconfig.defaults
 sdkconfig.old
+questions
