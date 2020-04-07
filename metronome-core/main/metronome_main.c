@@ -95,8 +95,6 @@ void metronome_run(BeatMachine_t* bm)
     /* run the metronome main code */
     puts(help_msg);
 
-    beat_start(bm);
-
     while(1)
     {
         /* queue les data du serveur ou alors de la console
