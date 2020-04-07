@@ -1,16 +1,10 @@
 // /* standart */
 #include <stdio.h>
-// #include <string.h>
 #include <assert.h>
 
-/* FreeRTOs */
+/* FreeRTOS */
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
-// /* network */
-// #include "esp_netif.h"
-// #include "esp_event.h"
-// #include "mdns.h" /* local dns */
 
 
 /* general */

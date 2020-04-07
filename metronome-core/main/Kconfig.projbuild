@@ -38,7 +38,7 @@ menu "Metronome Configuration"
     endmenu
 
     # WEB DEPLOY CONFIGURATION
-    choice Deploy mode
+    choice
         prompt "Web interface deploy mode"
         default M_WEB_DEPLOY_SEMIHOST
         help

@@ -1,32 +1,30 @@
 # Edit following two lines to set component requirements (see docs)
 
 # file < metronome_main.c >
+# Include list and corresponding component names
+#
+# file --> component
 
-# /* FreeRTOs */
-# #include "freertos/FreeRTOS.h"
-# #include "freertos/task.h"
-
-# // /* network */
-# // #include "esp_netif.h"
-# // #include "esp_event.h"
-# // #include "mdns.h" /* local dns */
-
+# /* FreeRTOS */
+# "freertos/FreeRTOS.h"
+# "freertos/task.h"		--> freertos
 
 # /* general */
-# // #include "esp_system.h"
-# #include "nvs_flash.h"
-# #include "esp_log.h"
+# "nvs_flash.h"			--> nvs_flash
+# "esp_log.h"			--> log
+# "driver/timer.h"		--> driver
 
 # /* custom */
-# #include "m_init.h"
-# #include "m_http_server.h"
-# #include "m_beat.h"
- idf_component_register(SRCS "metronome_main.c"
+# "m_init.h"			--> m_init
+# "m_http_server.h"		--> m_http_server  
+# "m_beat.h"			--> m_beat
+
+idf_component_register(SRCS "metronome_main.c"
                      INCLUDE_DIRS "."
-                     REQUIRES "freertos nvs_flash log m_beat m_http_server m_init")
+                     REQUIRES "freertos driver nvs_flash log m_beat m_http_server m_init ")
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)
-    set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../front")
+    set(WEB_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../front")
     if(EXISTS ${WEB_SRC_DIR}/dist)
         spiffs_create_partition_image(www ${WEB_SRC_DIR}/dist FLASH_IN_PROJECT)
     else()
