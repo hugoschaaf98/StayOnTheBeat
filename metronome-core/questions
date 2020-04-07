@@ -1,3 +1,0 @@
-qu'est ce que ça fait de suspend une tache alors qu'elle est deja bloquée dans un notifywait ?
-qu'est ce que ça fait de resume une tache alors qu'elle est bloquée dans un notifywait ?
-est ce que si je suspend la beat_play_task pdt que ça output un son, le son est quand m^eme output jusqu'au bout ?
