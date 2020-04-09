@@ -19,13 +19,13 @@ menu "Metronome Configuration"
 
         config M_WIFI_PASSWORD
             string "WiFi Password"
-            default "password"
+            default "toBeatOrNotToBeat"
             help
                 WiFi password (WPA or WPA2).
 
         config M_WIFI_MAX_STA_CONN
             int "Maximal STA connections"
-            default 4
+            default 1
             help
                 Max number of wifi connections.
 
@@ -34,47 +34,47 @@ menu "Metronome Configuration"
             default "stayonthebeat"
             help
                 Specify the domain name used in the mDNS service.
-                Note that webpage also take it as a part of URL where it will send GET/POST requests to
+                Note that a webpage also take it as a part of URL where it will send GET/POST requests to
     endmenu
 
-    # WEB DEPLOY CONFIGURATION
+    # Data DEPLOY CONFIGURATION
     choice
-        prompt "Web interface deploy mode"
-        default M_WEB_DEPLOY_SEMIHOST
+        prompt "Data deploy mode"
+        default M_DATA_DEPLOY_SF
         help
-            Select website deploy mode.
-            You can deploy website to host, and ESP32 will retrieve them in a semihost way (JTAG is needed).
-            You can deploy website to SD card or SPI flash, and ESP32 will retrieve them via SDIO/SPI interface.
+            Select data deploy mode.
+            You can deploy data to host, and ESP32 will retrieve them in a semihost way (JTAG is needed).
+            You can deploy data to SD card or SPI flash, and ESP32 will retrieve them via SDIO/SPI interface.
             Detailed operation steps are listed in the example README file.
-        config M_WEB_DEPLOY_SEMIHOST
-            bool "Deploy website to host (JTAG is needed)"
+        config M_DATA_DEPLOY_SEMIHOST
+            bool "Deploy data to host (JTAG is needed)"
             help
-                Deploy website to host.
+                Deploy data to host.
                 It is recommended to choose this mode during developing.
-        config M_WEB_DEPLOY_SD
+        config M_DATA_DEPLOY_SD
             depends on IDF_TARGET_ESP32
-            bool "Deploy website to SD card"
+            bool "Deploy data to SD card"
             help
-                Deploy website to SD card.
-                Choose this production mode if the size of website is too large (bigger than 2MB).
-        config M_WEB_DEPLOY_SF
-            bool "Deploy website to SPI Nor Flash"
+                Deploy data to SD card.
+                Choose this production mode if the size of data is too large (bigger than 2MB).
+        config M_DATA_DEPLOY_SF
+            bool "Deploy data to SPI Nor Flash"
             help
-                Deploy website to SPI Nor Flash.
-                Choose this production mode if the size of website is small (less than 2MB).
+                Deploy data to SPI Nor Flash.
+                Choose this production mode if the size of data is small (less than 2MB).
     endchoice
 
-if M_WEB_DEPLOY_SEMIHOST
+if M_DATA_DEPLOY_SEMIHOST
     config M_HOST_PATH_TO_MOUNT
-        string "Host path to mount (e.g. absolute path to web dist directory)"
-        default "PATH-TO-WEB-DIST_DIR"
+        string "Host path to mount (e.g. absolute path to data directory)"
+        default "PATH-TO-DATA-DIR"
         help
             When using semihost in ESP32, you should specify the host path which will be mounted to VFS.
             Note that only absolute path is acceptable.
 endif
-    config M_WEB_MOUNT_POINT
-        string "Website mount point in VFS"
-        default "/www"
+    config M_DATA_MOUNT_POINT
+        string "data mount point in VFS"
+        default "/data"
         help
             Specify the mount point in VFS.
 endmenu

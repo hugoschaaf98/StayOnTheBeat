@@ -6,12 +6,13 @@
    software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
    CONDITIONS OF ANY KIND, either express or implied.
 */
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+
 #include <string.h>
 #include <sys/fcntl.h>
 #include <unistd.h>
 
 #include "esp_http_server.h"
-//#include "esp_system.h"
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "cJSON.h"

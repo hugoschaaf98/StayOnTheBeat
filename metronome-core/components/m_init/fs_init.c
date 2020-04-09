@@ -1,14 +1,16 @@
 #include "m_init.h"
 
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+
 /* storage */
 #include "esp_vfs_fat.h"
-#if CONFIG_M_WEB_DEPLOY_SEMIHOST
+#if CONFIG_M_DATA_DEPLOY_SEMIHOST
 #include "esp_vfs_semihost.h"
 #endif
-#if CONFIG_M_WEB_DEPLOY_SF
+#if CONFIG_M_DATA_DEPLOY_SF
 #include "esp_spiffs.h"
 #endif
-#if CONFIG_M_WEB_DEPLOY_SD
+#if CONFIG_M_DATA_DEPLOY_SD
 #include "sdmmc_cmd.h"
 #include "driver/sdmmc_host.h"
 #include "driver/gpio.h"
@@ -19,10 +21,10 @@
 static char* TAG = "fs_init";
 
 /* semihost via jtag deploy */
-#if CONFIG_M_WEB_DEPLOY_SEMIHOST
+#if CONFIG_M_DATA_DEPLOY_SEMIHOST
 esp_err_t fs_init(void)
 {
-    esp_err_t ret = esp_vfs_semihost_register(CONFIG_M_WEB_MOUNT_POINT, CONFIG_M_HOST_PATH_TO_MOUNT);
+    esp_err_t ret = esp_vfs_semihost_register(CONFIG_M_DATA_MOUNT_POINT, CONFIG_M_HOST_PATH_TO_MOUNT);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to register semihost driver (%s)!", esp_err_to_name(ret));
         return ESP_FAIL;
@@ -32,7 +34,7 @@ esp_err_t fs_init(void)
 #endif
 
 /* SD card deploy */
-#if CONFIG_M_WEB_DEPLOY_SD
+#if CONFIG_M_DATA_DEPLOY_SD
 esp_err_t fs_init(void)
 {
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
@@ -51,7 +53,7 @@ esp_err_t fs_init(void)
     };
 
     sdmmc_card_t *card;
-    esp_err_t ret = esp_vfs_fat_sdmmc_mount(CONFIG_M_WEB_MOUNT_POINT, &host, &slot_config, &mount_config, &card);
+    esp_err_t ret = esp_vfs_fat_sdmmc_mount(CONFIG_M_DATA_MOUNT_POINT, &host, &slot_config, &mount_config, &card);
     if (ret != ESP_OK) {
         if (ret == ESP_FAIL) {
             ESP_LOGE(TAG, "Failed to mount filesystem.");
@@ -67,11 +69,11 @@ esp_err_t fs_init(void)
 #endif
 
 /* spiff deploy */ 
-#if CONFIG_M_WEB_DEPLOY_SF
+#if CONFIG_M_DATA_DEPLOY_SF
 esp_err_t fs_init(void)
 {
     esp_vfs_spiffs_conf_t conf = {
-        .base_path = CONFIG_M_WEB_MOUNT_POINT,
+        .base_path = CONFIG_M_DATA_MOUNT_POINT,
         .partition_label = NULL,
         .max_files = 5,
         .format_if_mount_failed = false

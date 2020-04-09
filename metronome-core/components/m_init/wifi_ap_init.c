@@ -1,5 +1,7 @@
 #include "m_init.h"
 
+#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
