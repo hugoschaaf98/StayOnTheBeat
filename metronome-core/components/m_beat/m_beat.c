@@ -37,7 +37,7 @@ static const char *TAG = "beat";
 #define BEAT_I2S_PORT_NUM			I2S_NUM_0		/* don't change it if use built in DAC */
 #define	BEAT_I2S_BITS_PER_SAMPLE	I2S_BITS_PER_SAMPLE_16BIT
 #define BEAT_I2S_DMA_BUF_LEN		1024			/* Size of a single dma buffer */
-#define BEAT_I2S_DMA_BUF_COUNT		4				/* Count of dma buffers */
+#define BEAT_I2S_DMA_BUF_COUNT		6				/* Count of dma buffers */
 
 
 /* Utility stuffs around timer
@@ -92,8 +92,8 @@ static void beat_i2s_init(void)
 		.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,		/* RIGHT -> DAC1 ie GPIO25; LEFT -> DAC2 ie GPIO26*/
 		.communication_format = I2S_COMM_FORMAT_PCM,
 		.intr_alloc_flags = 0,								/* default interrupt priority */
-		.dma_buf_count = BEAT_I2S_DMA_BUF_COUNT,												
-		.dma_buf_len = BEAT_I2S_DMA_BUF_LEN,											
+		.dma_buf_count = BEAT_I2S_DMA_BUF_COUNT,			/* should be between 2 and 128 */ 									
+		.dma_buf_len = BEAT_I2S_DMA_BUF_LEN,				/* should be between 8 and 1024 */							
 		.use_apll = true
 	};
 
@@ -108,7 +108,7 @@ static void beat_i2s_init(void)
  *        DAC can only output 8bit data value.
  *        I2S DMA will still send 16 bit or 32bit data, the highest 8bit contains DAC data.
  */
-static int beat_i2s_dac_data_scale(uint8_t* d_buff, uint8_t* s_buff, uint32_t len)
+static int beat_i2s_dac_data_scale(uint8_t* d_buff, const uint8_t* s_buff, uint32_t len)
 {
     uint32_t j = 0;
     for (int i = 0; i < len; i++) {
@@ -165,7 +165,7 @@ static void beat_play_task(void* arg)
 			
 
 			i2s_write(BEAT_I2S_PORT_NUM, bm->sound_buf, bm->sound_buf_len, &bw, portMAX_DELAY);
-			ESP_LOGI(TAG, "beat played ! <%d> bytes written to DMA", bw, );
+			ESP_LOGI(TAG, "beat played ! <%d> of <%d> bytes written to DMA", bw, bm->sound_buf_len );
 			/*
 			offset = 0; tot_size = 0;
 			i2s_start(CONFIG_I2S_PORT_NUM);
@@ -380,9 +380,13 @@ esp_err_t beat_register_sound(BeatMachine* bm, const char* filename)
 
 		// bm->sound_buf = sound_buf;
 		// bm->sound_buf_len = btr;
-		bm->sound_buf = audio_table;
-		bm->sound_buf_len = sizeof(audio_table);
 
+		// bm->sound_buf = audio_table;
+		// bm->sound_buf_len = sizeof(audio_table);
+
+		bm->sound_buf = (uint8_t *)heap_caps_realloc(bm->sound_buf, 2*sizeof(audio_table), MALLOC_CAP_DMA);
+		bm->sound_buf_len = (size_t) beat_i2s_dac_data_scale(bm->sound_buf, audio_table, sizeof(audio_table));
+		ESP_LOGV(TAG, "audio_table is <%d> bytes long. sound_buf is <%d> bytes long.", sizeof(audio_table), bm->sound_buf_len);
 	}
 	return ESP_OK;
 }

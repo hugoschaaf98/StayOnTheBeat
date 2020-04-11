@@ -73,7 +73,8 @@ void metronome_init(BeatMachine* bm)
 
 
     ESP_LOGV(TAG, "Starting http server...");
-    ESP_ERROR_CHECK(http_server_start(CONFIG_M_DATA_MOUNT_POINT));
+    ESP_ERROR_CHECK(http_servep
+    r_start(CONFIG_M_DATA_MOUNT_POINT));
     */
 
     ESP_LOGI(TAG, "Initializing beat machine...");
