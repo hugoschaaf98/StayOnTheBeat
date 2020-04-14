@@ -68,8 +68,9 @@ static const char *TAG = "beat";
 #define BPM_TO_PERIOD_MS(bpm)	(uint32_t)(60000/bpm) 	/* adding 0.5 acts as a round function */
 #define BPM_TO_PERIOD_100US(bpm)	(uint32_t)(600000/bpm)
 
-/* the play beat task handler */
-static TaskHandle_t xBeat_play_task_handle;
+/* the play beat task handler and queue */
+static TaskHandle_t xBeat_play_task_handle = NULL;
+static QueueHandle_t xi2s_queue_handle = NULL;
 
 /* Buffer to store the beat sound data*/
 DRAM_ATTR static uint8_t* sound_buf = NULL;
@@ -94,7 +95,9 @@ static void beat_i2s_init(void)
 		.intr_alloc_flags = 0,								/* default interrupt priority */
 		.dma_buf_count = BEAT_I2S_DMA_BUF_COUNT,			/* should be between 2 and 128 */ 									
 		.dma_buf_len = BEAT_I2S_DMA_BUF_LEN,				/* should be between 8 and 1024 */							
-		.use_apll = true
+		.use_apll = true,
+		.tx_desc_auto_clear = true							/* output 0 when buffers has been read. Otherwise the
+															driver wil output continuously the last buffers */
 	};
 
 	i2s_driver_install(BEAT_I2S_PORT_NUM, &i2s_config, 0, NULL);   /* install and start i2s driver */
@@ -104,7 +107,7 @@ static void beat_i2s_init(void)
 
 
 /**
- * @brief Scale data to 16bit/32bit for I2S DMA output.
+ * @brief Scale data to 16bit for I2S DMA output.
  *        DAC can only output 8bit data value.
  *        I2S DMA will still send 16 bit or 32bit data, the highest 8bit contains DAC data.
  */
@@ -128,10 +131,7 @@ static void beat_play_task(void* arg)
 	TickType_t xLastBeatTime;
 	BaseType_t ret;
 	BeatMachine* bm = (BeatMachine*)arg;
-
-	/* int offset = 0, tot_size = 0; */
-	size_t bw = 0; /* bytes written to I2S */
-
+	int offset = 0, bw = 0, btw = 0, tot_size = 0;
 
 	vTaskSuspend(NULL); /* wait for the first beat_start to be called */
 
@@ -139,11 +139,6 @@ static void beat_play_task(void* arg)
 
 	for(;;)
 	{
-		/* waiting for the next beat, stop the i2s driver and preload data */
-		/*i2s_stop(CONFIG_I2S_PORT_NUM);
-		  i2s_write(CONFIG_I2S_PORT_NUM, i2s_write_buf, i2s_wr_len, &bytes_written, portMAX_DELAY);
-		*/
-
 		ret = pdTRUE;
 
 		/* use the direct notification system to block the task until next beat */
@@ -154,31 +149,15 @@ static void beat_play_task(void* arg)
 
 		if(ret == pdTRUE)
 		{
-			// int offset = 0;
-        	// int tot_size = sizeof(audio_table);
-        	// while (offset < tot_size) {
-            // 	int play_len = ((tot_size - offset) > (4 * 1024)) ? (4 * 1024) : (tot_size - offset);
-            // 	int i2s_wr_len = example_i2s_dac_data_scale(i2s_write_buff, (uint8_t*)(audio_table + offset), play_len);
-            // 	i2s_write(EXAMPLE_I2S_NUM, bm->sound_buf, bm->sound_buf_len, &bytes_written, portMAX_DELAY);
-            // 	offset += play_len;
-        	// }
-			
 
-			i2s_write(BEAT_I2S_PORT_NUM, bm->sound_buf, bm->sound_buf_len, &bw, portMAX_DELAY);
-			ESP_LOGI(TAG, "beat played ! <%d> of <%d> bytes written to DMA", bw, bm->sound_buf_len );
-			/*
-			offset = 0; tot_size = 0;
-			i2s_start(CONFIG_I2S_PORT_NUM);
-
-			while (offset < tot_size) 
-			{
-				 	FAUT FINIR ICI !
-					/!\   /!\   /!\
-				
-				i2s_write(CONFIG_I2S_PORT_NUM, i2s_write_buf, i2s_wr_len, &bytes_written, portMAX_DELAY);
-				
-			}
-			*/
+			btw = bm->sound_buf_len;
+			while (offset < bm->sound_buf_len) {
+            	i2s_write(BEAT_I2S_PORT_NUM, (bm->sound_buf)+offset, btw, (size_t*)&bw, portMAX_DELAY);
+				offset += bw;
+				btw -= offset;
+        	}
+			ESP_LOGI(TAG, "beat played ! <%d> of <%d> bytes written to DMA", offset, bm->sound_buf_len );
+			offset = 0;
 		}
 		else /* if timeout */
 		{
@@ -187,7 +166,7 @@ static void beat_play_task(void* arg)
 		}	
 	}
 
-	vTaskDelete(NULL); /* just in case of... */
+	vTaskDelete(NULL); /* just in case... */
 } 
 
 
@@ -383,7 +362,6 @@ esp_err_t beat_register_sound(BeatMachine* bm, const char* filename)
 
 		// bm->sound_buf = audio_table;
 		// bm->sound_buf_len = sizeof(audio_table);
-
 		bm->sound_buf = (uint8_t *)heap_caps_realloc(bm->sound_buf, 2*sizeof(audio_table), MALLOC_CAP_DMA);
 		bm->sound_buf_len = (size_t) beat_i2s_dac_data_scale(bm->sound_buf, audio_table, sizeof(audio_table));
 		ESP_LOGV(TAG, "audio_table is <%d> bytes long. sound_buf is <%d> bytes long.", sizeof(audio_table), bm->sound_buf_len);
