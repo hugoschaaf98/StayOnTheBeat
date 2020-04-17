@@ -14,7 +14,7 @@
 
 #include "audio_file.h"
 
-#define LOG_LOCAL_LEVEL ESP_LOG_VERBOSE
+#define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "esp_log.h"
 
 static const char *TAG = "beat";
@@ -51,7 +51,7 @@ static TaskHandle_t xBeat_play_task_handle = NULL;
 /* Buffer to store the beat sound data*/
 // DRAM_ATTR static uint8_t* sound_buf = NULL;
 
-WORD_ALIGNED_ATTR static uint8_t dummy_buf_127_values[BEAT_I2S_DMA_BUF_LEN] = {0};
+DMA_ATTR static uint8_t dummy_buf_127_values[BEAT_I2S_DMA_BUF_LEN];
 
 /************************************************
  *  			AUDIO OUTPUT
@@ -65,9 +65,7 @@ WORD_ALIGNED_ATTR static uint8_t dummy_buf_127_values[BEAT_I2S_DMA_BUF_LEN] = {0
 static void beat_i2s_init(void)
 {
 	i2s_config_t i2s_config = {
-		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
-		.sample_rate = BEAT_AUDIO_SAMPLE_RATE,
-		.bits_per_sample = BEAT_I2S_BITS_PER_SAMPLE,		
+		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,	
 		.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,		/* RIGHT -> DAC1 ie GPIO25; LEFT -> DAC2 ie GPIO26*/
 		.communication_format = I2S_COMM_FORMAT_PCM,
 		.intr_alloc_flags = 0,								/* default interrupt priority */
@@ -78,7 +76,7 @@ static void beat_i2s_init(void)
 	};
 	i2s_driver_install(BEAT_I2S_PORT_NUM, &i2s_config, 0, NULL);   /* install and start i2s driver */
 	i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
-	// i2s_set_clk(BEAT_I2S_PORT_NUM, BEAT_AUDIO_SAMPLE_RATE, BEAT_I2S_BITS_PER_SAMPLE, 1);
+	i2s_set_clk(BEAT_I2S_PORT_NUM, BEAT_AUDIO_SAMPLE_RATE, BEAT_I2S_BITS_PER_SAMPLE, 2);
 }
 
 
@@ -128,7 +126,7 @@ static void beat_play_task(void* arg)
 						offset += bw;
 					}
 				}
-				ESP_LOGV(TAG,"offset :%d bytes written.", offset);
+				// ESP_LOGV(TAG,"offset :%d bytes written.", offset);
 				break;
 
 			case PAUSE:
@@ -138,7 +136,7 @@ static void beat_play_task(void* arg)
 					BEAT_I2S_WRITE(dummy_buf_127_values, sizeof(dummy_buf_127_values), &bw);
 					offset += bw;
 				}
-				ESP_LOGV(TAG,"PAUSE. offset:%d", offset);
+				// ESP_LOGV(TAG,"PAUSE. offset:%d", offset);
 				break;
 
 			default:
