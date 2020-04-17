@@ -12,7 +12,6 @@
 #include "esp_attr.h"
 #include "nvs_flash.h"
 #include "esp_log.h"
-#include "driver/timer.h"
 
 /* metronome */
 #include "m_init.h"
@@ -78,11 +77,9 @@ void metronome_init(BeatMachine* bm)
     */
 
     ESP_LOGI(TAG, "Initializing beat machine...");
-    ESP_ERROR_CHECK(beat_init(bm));
-    ESP_ERROR_CHECK(beat_register_timer(bm, TIMER_GROUP_0, TIMER_1, true));
     ESP_ERROR_CHECK(beat_register_sound(bm, CONFIG_M_DATA_MOUNT_POINT"/woodblock.bin"));
     ESP_ERROR_CHECK(beat_set_bpm(bm,50));
-
+    ESP_ERROR_CHECK(beat_init(bm));
 }
 
 void metronome_run(BeatMachine* bm)
@@ -147,7 +144,7 @@ void metronome_run(BeatMachine* bm)
             ESP_LOGE(TAG, "Reached maximum timeout to recieve data from user !");
         }
 
-        vTaskDelay(100);
+        vTaskDelay(10);
     }
 }
 

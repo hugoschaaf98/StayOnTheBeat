@@ -1,6 +1,7 @@
 #include "m_beat.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <sys/fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -26,10 +27,10 @@ static const char *TAG = "beat";
 #include "driver/i2s.h"
 #include "freertos/queue.h"
 
-#define BEAT_MAX_SAMPLE_RATE 		44100			/* Hz, for mono audio. It hugely enough for a metronome.... */
-#define BEAT_AUDIO_SAMPLE_RATE		16000
+#define BEAT_MAX_SAMPLE_RATE 		44100UL			/* Hz, for mono audio. It hugely enough for a metronome.... */
+#define BEAT_AUDIO_SAMPLE_RATE		16000UL
 
-
+#define BEAT_PLAY_TASK_PRIORITY		10
 /**
  * I2S with DMA configuration 
  * audio data can be up to @44.1kHz - 8 bits - stereo.
@@ -39,41 +40,18 @@ static const char *TAG = "beat";
 #define BEAT_I2S_DMA_BUF_LEN		1024			/* Size of a single dma buffer */
 #define BEAT_I2S_DMA_BUF_COUNT		6				/* Count of dma buffers */
 
-
-/* Utility stuffs around timer
- * 
- */
-#define TIMER_FREQ(tim_base, tim_div)				(tim_base / tim_div)
-#define TIMER_PERIOD_100US(tim_base, tim_div)		(tim_div*10000UL/tim_base)	/* returns the period multiple of 100US */ 				 				
-#define ALARM_VAL_FROM_FREQ(alarm_f, timer_f)		(timer_f / alarm_f)	/* the two members must share same unit	*/ 
-#define ALARM_VAL_FROM_PERIOD(alarm_p, timer_p) 	(alarm_p / timer_p)	/* the two members must share same unit	*/
-
-/**
- * Beat Timer
- * The beat timer is to generate a periodic task notification
- * @bpm to playback the beat sound generated via i2s 
- */
-#define BEAT_TASK_PRIORITY 				10		/* arbitrary but high enough to be the highest priority task after
-                           			  			 * beat_play_task() */
-#define BEAT_PLAY_TASK_PRIORITY			BEAT_TASK_PRIORITY+1	
-#define BEAT_PLAY_TASK_MAX_BLOCK_TICKS	pdMS_TO_TICKS(5000)		/* 5000ms max blocking before considering the beat machine is paused */
-#define BEAT_TIMER_GROUP				TIMER_GROUP_0
-#define BEAT_TIMER_IDX 					TIMER_1
-#define BEAT_TIMER_DIVIDER				8000 	/* since TIMER_BASE_CLK = APB_CLK = 80MHz, Timer @10kHz - 0.1ms period */
-#define BEAT_TIMER_PERIOD_100US 	TIMER_PERIOD_100US(TIMER_BASE_CLK, BEAT_TIMER_DIVIDER)
-
-/* Generic
- * 
- */
-#define BPM_TO_PERIOD_MS(bpm)	(uint32_t)(60000/bpm) 	/* adding 0.5 acts as a round function */
-#define BPM_TO_PERIOD_100US(bpm)	(uint32_t)(600000/bpm)
+/* utils */
+#define BEAT_MS_TO_SAMPLES(t)		((uint32_t)t*BEAT_AUDIO_SAMPLE_RATE/1000)
+#define BEAT_I2S_WRITE(src, btw, bw) i2s_write(BEAT_I2S_PORT_NUM, src, btw, (size_t*)bw, portMAX_DELAY)
 
 /* the play beat task handler and queue */
 static TaskHandle_t xBeat_play_task_handle = NULL;
-static QueueHandle_t xi2s_queue_handle = NULL;
+// static QueueHandle_t xi2s_queue_handle = NULL;
 
 /* Buffer to store the beat sound data*/
-DRAM_ATTR static uint8_t* sound_buf = NULL;
+// DRAM_ATTR static uint8_t* sound_buf = NULL;
+
+WORD_ALIGNED_ATTR static uint8_t dummy_buf_127_values[BEAT_I2S_DMA_BUF_LEN] = {0};
 
 /************************************************
  *  			AUDIO OUTPUT
@@ -89,20 +67,18 @@ static void beat_i2s_init(void)
 	i2s_config_t i2s_config = {
 		.mode = I2S_MODE_MASTER | I2S_MODE_TX | I2S_MODE_DAC_BUILT_IN,
 		.sample_rate = BEAT_AUDIO_SAMPLE_RATE,
-		.bits_per_sample = BEAT_I2S_BITS_PER_SAMPLE,		/* we only want 8 bits unsigned audio data */
+		.bits_per_sample = BEAT_I2S_BITS_PER_SAMPLE,		
 		.channel_format = I2S_CHANNEL_FMT_RIGHT_LEFT,		/* RIGHT -> DAC1 ie GPIO25; LEFT -> DAC2 ie GPIO26*/
 		.communication_format = I2S_COMM_FORMAT_PCM,
 		.intr_alloc_flags = 0,								/* default interrupt priority */
 		.dma_buf_count = BEAT_I2S_DMA_BUF_COUNT,			/* should be between 2 and 128 */ 									
 		.dma_buf_len = BEAT_I2S_DMA_BUF_LEN,				/* should be between 8 and 1024 */							
-		.use_apll = true,
-		.tx_desc_auto_clear = true							/* output 0 when buffers has been read. Otherwise the
-															driver wil output continuously the last buffers */
+		.use_apll = false,
+		.tx_desc_auto_clear = false
 	};
-
 	i2s_driver_install(BEAT_I2S_PORT_NUM, &i2s_config, 0, NULL);   /* install and start i2s driver */
 	i2s_set_dac_mode(I2S_DAC_CHANNEL_BOTH_EN);
-	i2s_set_clk(BEAT_I2S_PORT_NUM, BEAT_AUDIO_SAMPLE_RATE, BEAT_I2S_BITS_PER_SAMPLE, 1);
+	// i2s_set_clk(BEAT_I2S_PORT_NUM, BEAT_AUDIO_SAMPLE_RATE, BEAT_I2S_BITS_PER_SAMPLE, 1);
 }
 
 
@@ -121,121 +97,59 @@ static int beat_i2s_dac_data_scale(uint8_t* d_buff, const uint8_t* s_buff, uint3
     return (len * 2);
 }
 
-/**
- * Task which is waiting for a notification
- * to play the beat. The notification comes
- * from the beat_timer_isr() @bpm frequency
- */
 static void beat_play_task(void* arg)
 {
-	TickType_t xLastBeatTime;
 	BaseType_t ret;
 	BeatMachine* bm = (BeatMachine*)arg;
-	int offset = 0, bw = 0, btw = 0, tot_size = 0;
-
-	vTaskSuspend(NULL); /* wait for the first beat_start to be called */
-
-	xLastBeatTime = xTaskGetTickCount();
+	int offset, bw, btw;
 
 	for(;;)
 	{
-		ret = pdTRUE;
+		offset = 0;
+		bw = 0;
+		btw = 0;
 
-		/* use the direct notification system to block the task until next beat */
-		if(bm->use_timer) /* wait the start signal from beat_timer_isr() to play the beat or timeout*/
-		{ ret = xTaskNotifyWait(0, 0, NULL, BEAT_PLAY_TASK_MAX_BLOCK_TICKS); }	/* if no timeout, the metronome is running. Play the Beat */
-		else
-		{ vTaskDelayUntil(&xLastBeatTime, bm->period_ticks); }
-
-		if(ret == pdTRUE)
+		switch(bm->status)
 		{
+			/* fill the sound of the beat then dummy values to maintain the average value of the signal */
+			case PLAY:
+			
+				btw = bm->period_bytes; /* save the value if bpm changed while BeatMachine running*/
+				while (offset < btw)
+				{
+					if(offset < bm->sound_buf_len) /* write beat sound */
+					{
+						BEAT_I2S_WRITE((bm->sound_buf)+offset, (bm->sound_buf_len)-offset, &bw);
+						offset += bw;
+					}
+					else /* fill with dummy bytes */
+					{
+						BEAT_I2S_WRITE(dummy_buf_127_values, btw-offset<sizeof(dummy_buf_127_values)?btw-offset:sizeof(dummy_buf_127_values), &bw);
+						offset += bw;
+					}
+				}
+				ESP_LOGV(TAG,"offset :%d bytes written.", offset);
+				break;
 
-			btw = bm->sound_buf_len;
-			while (offset < bm->sound_buf_len) {
-            	i2s_write(BEAT_I2S_PORT_NUM, (bm->sound_buf)+offset, btw, (size_t*)&bw, portMAX_DELAY);
-				offset += bw;
-				btw -= offset;
-        	}
-			ESP_LOGI(TAG, "beat played ! <%d> of <%d> bytes written to DMA", offset, bm->sound_buf_len );
-			offset = 0;
+			case PAUSE:
+				/* write at leat the equivalent of the entire DMA buffers with dummy values */
+				while(offset < BEAT_I2S_DMA_BUF_COUNT*BEAT_I2S_DMA_BUF_LEN)
+				{
+					BEAT_I2S_WRITE(dummy_buf_127_values, sizeof(dummy_buf_127_values), &bw);
+					offset += bw;
+				}
+				ESP_LOGV(TAG,"PAUSE. offset:%d", offset);
+				break;
+
+			default:
+				ESP_LOGE(TAG,"beat_play_task(): default behaviour triggerd. Stopping BeatMachine.");
+				beat_stop(bm);
+				break;
 		}
-		else /* if timeout */
-		{
-			ESP_LOGV(TAG, "metronome paused...");
-			vTaskSuspend(NULL);
-		}	
+		//vTaskDelay();
 	}
-
 	vTaskDelete(NULL); /* just in case... */
 } 
-
-
-/************************************************
- *  			BEAT TIMER
- ***********************************************/
-
-#if BEAT_USE_TIMER_ISR
-
-/**
- * this ISR is used to send a task notification to the beat_play_task()
- * which is responsible for playing the beat at the tempo.
- * 
- */
-static void IRAM_ATTR beat_timer_ISR(void* ptr)
-{
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-	BeatMachine* bm = (BeatMachine*) ptr;
-
-	timer_group_clr_intr_status_in_isr(bm->timer_group, bm->timer_idx);
-	timer_group_enable_alarm_in_isr(bm->timer_group, bm->timer_idx);
-
-	vTaskNotifyGiveFromISR(xBeat_play_task_handle, &xHigherPriorityTaskWoken);
-	/* Force a context switch if xHigherPriorityTaskWoken is now set to pdTRUE.
-    The macro used to do this is dependent on the port and may be called
-    portEND_SWITCHING_ISR. */
-	if(xHigherPriorityTaskWoken)
-    { 
-		portYIELD_FROM_ISR();
-	}
-}
-
-/**
- * Timer initialization function. Select a timer between the 4
- * available.
- *
- * timer_group	The timer group number
- * timer_idx  The timer index
- */
-static esp_err_t beat_timer_init(BeatMachine *bm)
-{
-	timer_group_t tgp = bm->timer_group;
-	timer_idx_t tid = bm->timer_idx;
-
-	esp_err_t ret;
-	timer_config_t config = {
-		.divider = BEAT_TIMER_DIVIDER,
-		.counter_dir = TIMER_COUNT_UP,
-		.counter_en = TIMER_PAUSE,
-		.alarm_en = TIMER_ALARM_EN,
-		.intr_type = TIMER_INTR_LEVEL,
-		.auto_reload = TIMER_AUTORELOAD_EN,
-	};
-
-	ret = timer_init(tgp, tid, &config);
-	ESP_ERROR_CHECK(ret);
-	ret = timer_set_counter_value(tgp, tid, 0x0000000000000000ULL);
-	ESP_ERROR_CHECK(ret);
-	ret = timer_set_alarm_value(tgp, tid, 0xFFFFFFFFFFFFFFFFULL);
-	ESP_ERROR_CHECK(ret);
-	ret = timer_enable_intr(tgp, tid);
-	ESP_ERROR_CHECK(ret);
-	/* Register an ISR handler */
-	timer_isr_register(tgp, tid, beat_timer_ISR, bm, ESP_INTR_FLAG_IRAM, NULL);
-	
-	return ret;
-}
-
-#endif /* end #ifdef M_USE_BEAT_TIMER_ISR */
 
 
 /************************************************
@@ -248,13 +162,10 @@ BeatMachine beat_create(void)
 		.bpm = 0,
 		.sound_buf = NULL,
 		.sound_buf_len = 0,
+		.period_samples = 0,
+		.period_bytes = 0,
 		.status = PAUSE,
-		.period_100us = 0,
-		.period_ticks = 0,
-		.alarm_val = 0,
-		.timer_group = TIMER_GROUP_MAX,
-		.timer_idx = TIMER_MAX,
-		.use_timer = false
+		.bytes_per_sample = BEAT_I2S_BITS_PER_SAMPLE/8
 	};
 	return bm;
 }
@@ -262,9 +173,15 @@ BeatMachine beat_create(void)
 
 esp_err_t beat_init(BeatMachine* bm)
 {
+	/* initialize dummy values */
+	memset(dummy_buf_127_values, 127, sizeof(dummy_buf_127_values));
 	/* init the audio output I2S driver */
 	beat_i2s_init();
-	/* create the task which is unblocked periodically at bpm to play the beat */
+	if(bm->sound_buf == NULL)
+	{
+		ESP_LOGE(TAG,"BeatMachine failed to initialize. No sound registered !");
+		return ESP_FAIL;
+	}
 	if(xTaskCreatePinnedToCore(beat_play_task, "Beat playback task", 2048, bm, BEAT_PLAY_TASK_PRIORITY, &xBeat_play_task_handle, 1) != pdPASS ) return ESP_FAIL;
 	return ESP_OK;
 }
@@ -274,9 +191,6 @@ esp_err_t beat_start(BeatMachine* bm)
 {
 	esp_err_t ret = ESP_OK;
 	bm->status = PLAY;
-	i2s_start(BEAT_I2S_PORT_NUM);
-	if(bm->use_timer) { ret = timer_start(bm->timer_group, bm->timer_idx); }
-	vTaskResume(xBeat_play_task_handle);
 	return ret;
 }
 
@@ -285,14 +199,6 @@ esp_err_t beat_stop(BeatMachine* bm)
 {
 	esp_err_t ret = ESP_OK;
 	bm->status = PAUSE;
-	
-	/* stop i2s and don't forget to zero dma buffer
-	if the stop happend during a beat */
-	i2s_stop(BEAT_I2S_PORT_NUM);
-	i2s_zero_dma_buffer(BEAT_I2S_PORT_NUM);
-
-	if(bm->use_timer) { ret = timer_pause(bm->timer_group, bm->timer_idx); }
-	vTaskSuspend(xBeat_play_task_handle);
 	return ret;
 }
 
@@ -302,18 +208,9 @@ esp_err_t beat_set_bpm(BeatMachine* bm, bpm_t bpm)
 	/* set bpm and its corresponding value in ticks and 100us multiple
 	an perform some check */
 	bm->bpm = bpm > BEAT_MAX_BPM ? BEAT_MAX_BPM : (bpm < BEAT_MIN_BPM ? BEAT_MIN_BPM : bpm );
-	bm->period_100us = BPM_TO_PERIOD_100US(bm->bpm);
-	bm->period_ticks = pdMS_TO_TICKS(BPM_TO_PERIOD_MS(bm->bpm));
-
-	ESP_LOGV(TAG, "<%s> bpm:%u period_100us: %u period_ticks: %u ", __ASSERT_FUNC, bm->bpm, bm->period_100us, bm->period_ticks);
-
-	if(bm->use_timer)
-	{	
-		bm->alarm_val = ALARM_VAL_FROM_PERIOD(bm->period_100us , BEAT_TIMER_PERIOD_100US);
-		ESP_LOGV(TAG, "<%s> timer alarm value: %llu", __ASSERT_FUNC, bm->alarm_val);
-		return timer_set_alarm_value(bm->timer_group, bm->timer_idx, bm->alarm_val); 
-	}
-
+	bm->period_samples = BEAT_AUDIO_SAMPLE_RATE/bm->bpm*60;
+	bm->period_bytes = bm->period_samples*(uint32_t)(bm->bytes_per_sample);
+	ESP_LOGI(TAG,"beat_set_bpm(): BeatMachine attributes set to \nbpm:%d\nperiod_samples:%d\nperiod_bytes:%d", bm->bpm, bm->period_samples, bm->period_bytes);
 	return ESP_OK;
 }
 
@@ -321,6 +218,7 @@ esp_err_t beat_set_bpm(BeatMachine* bm, bpm_t bpm)
 esp_err_t beat_register_sound(BeatMachine* bm, const char* filename)
 {
     ESP_LOGV(TAG, "entering <%s()>", __ASSERT_FUNC);
+	beat_stop(bm); /* the sound file should not be modified when BeatMachine running */
 	if(filename != NULL)
 	{
 		// size_t btr = 0; /* bytes to read */
@@ -363,25 +261,13 @@ esp_err_t beat_register_sound(BeatMachine* bm, const char* filename)
 		// bm->sound_buf = audio_table;
 		// bm->sound_buf_len = sizeof(audio_table);
 		bm->sound_buf = (uint8_t *)heap_caps_realloc(bm->sound_buf, 2*sizeof(audio_table), MALLOC_CAP_DMA);
-		bm->sound_buf_len = (size_t) beat_i2s_dac_data_scale(bm->sound_buf, audio_table, sizeof(audio_table));
+		if(bm->sound_buf == NULL)
+		{
+			ESP_LOGE(TAG, "sound_buf malloc failed");
+			abort();
+		}
+		bm->sound_buf_len = (size_t) beat_i2s_dac_data_scale(bm->sound_buf, audio_table, sizeof(audio_table)); /* get 16bits per sample to match the DMA requirements */
 		ESP_LOGV(TAG, "audio_table is <%d> bytes long. sound_buf is <%d> bytes long.", sizeof(audio_table), bm->sound_buf_len);
 	}
 	return ESP_OK;
 }
-
-
-#if BEAT_USE_TIMER_ISR
-
-esp_err_t beat_register_timer(BeatMachine* bm, timer_group_t timer_group, timer_idx_t timer_idx, bool use_timer)
-{
-	bm->timer_group = timer_group;
-	bm->timer_idx = timer_idx;
-	bm->use_timer = use_timer;
-	if(bm->use_timer)
-	{
-		return beat_timer_init(bm);
-	}
-	return ESP_OK;
-}
-
-#endif
