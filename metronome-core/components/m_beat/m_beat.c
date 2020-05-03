@@ -17,7 +17,7 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "esp_log.h"
 
-static const char *TAG = "beat";
+static const char *TAG = "m_beat";
 
 /**
  * Audio 
@@ -126,7 +126,7 @@ static void beat_play_task(void* arg)
 						offset += bw;
 					}
 				}
-				// ESP_LOGV(TAG,"offset :%d bytes written.", offset);
+				// ESP_LOGV(TAG,"PLAY. offset :%d bytes written.", offset);
 				break;
 
 			case PAUSE:
@@ -136,7 +136,7 @@ static void beat_play_task(void* arg)
 					BEAT_I2S_WRITE(dummy_buf_127_values, sizeof(dummy_buf_127_values), &bw);
 					offset += bw;
 				}
-				// ESP_LOGV(TAG,"PAUSE. offset:%d", offset);
+				// ESP_LOGV(TAG,"PAUSE. offset:%d bytes written.", offset);
 				break;
 
 			default:
@@ -144,7 +144,7 @@ static void beat_play_task(void* arg)
 				beat_stop(bm);
 				break;
 		}
-		//vTaskDelay();
+		vTaskDelay(1);
 	}
 	vTaskDelete(NULL); /* just in case... */
 } 
@@ -203,8 +203,6 @@ esp_err_t beat_stop(BeatMachine* bm)
 
 esp_err_t beat_set_bpm(BeatMachine* bm, bpm_t bpm)
 {
-	/* set bpm and its corresponding value in ticks and 100us multiple
-	an perform some check */
 	bm->bpm = bpm > BEAT_MAX_BPM ? BEAT_MAX_BPM : (bpm < BEAT_MIN_BPM ? BEAT_MIN_BPM : bpm );
 	bm->period_samples = BEAT_AUDIO_SAMPLE_RATE/bm->bpm*60;
 	bm->period_bytes = bm->period_samples*(uint32_t)(bm->bytes_per_sample);
